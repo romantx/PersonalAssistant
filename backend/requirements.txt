@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+langgraph
+langchain-core
+langchain-anthropic
+python-telegram-bot
+python-dotenv
+httpx
