@@ -1,0 +1,192 @@
+{
+  "benchmark_metadata": {
+    "version": "2.0",
+    "required_domains": 8
+  },
+  "domains": [
+    {
+      "domain_id": "BENCH-D001",
+      "domain_name": "Product Wishlist Microservice",
+      "category": "API Design",
+      "problem_statement": "Design and implement a RESTful API for a Product Wishlist microservice. Users can create multiple wishlists, add and remove items (referenced by UUID), and view their own wishlists. The system must enforce authentication so users only access their data.",
+      "constraints": "Python 3.12, FastAPI, PostgreSQL, JWT Authentication.",
+      "acceptance_criteria": [
+        "POST /wishlists creates a new wishlist",
+        "POST /wishlists/{id}/items adds a product UUID",
+        "DELETE /wishlists/{id}/items/{item_id} removes a product",
+        "GET /wishlists retrieves user's own wishlists only"
+      ],
+      "edge_cases": [
+        "Adding a duplicate product UUID (should be idempotent or error clearly)",
+        "Attempting to add to a non-existent wishlist ID",
+        "Viewing another user's private wishlist ID (must 403)"
+      ],
+      "prompts": [
+        "You are a senior system architect. Design a RESTful API for a Product Wishlist microservice. Requirements: Users can create a wishlist, add and remove products, and view their own data only. Deliverables: OpenAPI spec, JSON schemas, docker-compose.",
+        "Architect a wishlist microservice using FastAPI. Must handle multiple wishlists per user, product items by UUID, and strict JWT-based security boundaries. Provide YAML OpenAPI 3.0 and Docker compose.",
+        "Implement a RESTful backend for product wishlists. Ensure relational integrity in PostgreSQL, use UUIDs for all identifiers, and provide a full service definition including security schemes."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D002",
+      "domain_name": "OAuth2 Authentication Service",
+      "category": "Security & Auth",
+      "problem_statement": "Design a centralized OAuth2-compliant authentication service. It must support user registration, login (issuing JWTs), and token refresh flows. Additionally, implement rate limiting to prevent brute-force attacks.",
+      "constraints": "Python 3.12, OAuth2 standards, JWT, Redis or Postgres for rate-limit tracking.",
+      "acceptance_criteria": [
+        "POST /register registers a new user",
+        "POST /token provides Access/Refresh tokens",
+        "POST /refresh rotates tokens",
+        "Rate limit: Max 5 attempts per minute per IP"
+      ],
+      "edge_cases": [
+        "Concurrent login attempts triggering rate limits",
+        "Expired refresh token usage",
+        "JWT signature spoofing detection"
+      ],
+      "prompts": [
+        "Securely design an OAuth2 authentication provider. Requirements: registration, token issuance, rotation, and rate limiting. Deliverables: OpenAPI spec and implementation plan.",
+        "Build a robust JWT auth service with protection against brute force. Must provide registration and token endpoints following OAuth2 standards.",
+        "Architect a security-first login service. Include JSON schemas for user objects, OpenAPI endpoints for tokens, and a docker-compose setup."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D003",
+      "domain_name": "Bank Transaction Router",
+      "category": "Data Pipeline",
+      "problem_statement": "Implement an ETL pipeline that receives bulk bank transaction records in JSON, maps them to a standardized internal schema, filters out fraudulent patterns (e.g., zero value, high frequency), and saves to a transactional DB.",
+      "constraints": "Python 3.12, Pydantic for mapping, SQLModel/SQLAlchemy for DB.",
+      "acceptance_criteria": [
+        "Endpoint to upload bulk JSON records",
+        "Validation of source fields (Account, Amount, Vendor)",
+        "Transformation to internal camelCase schema",
+        "Async processing queue or pattern"
+      ],
+      "edge_cases": [
+        "Malformed JSON payload",
+        "Negative transaction amounts",
+        "Duplicate Transaction IDs in same batch"
+      ],
+      "prompts": [
+        "Design a high-throughput bank transaction router. Validate and transform incoming JSON data to a standard internal schema. Provide docker-compose and schema maps.",
+        "Architect an async transaction processing pipeline using Python and FastAPI. Focus on data validation and internal schema consistency. Include OpenAPI spec.",
+        "Create an ETL service for banking data. Must handle record mapping, basic fraud filtering, and persistent storage in PostgreSQL."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D004",
+      "domain_name": "TMS-to-Accounting Sync",
+      "category": "System Integration",
+      "problem_statement": "Coordinate the synchronization of 'Billed Loads' from a Transport Management System (TMS) to an Accounting System. Ensure idempotency (single load = single invoice) and implement a retry mechanism for downstream API failures.",
+      "constraints": "Python 3.12, Idempotency keys, Circuit Breaker pattern.",
+      "acceptance_criteria": [
+        "Sync endpoint that triggers load export",
+        "Handling of 'In-Progress' vs 'Matched' load states",
+        "Idempotency tracking via UUIDs",
+        "Error logging and retry logic"
+      ],
+      "edge_cases": [
+        "Accounting API returns 503 Service Unavailable",
+        "Double-trigger of same Load ID sync",
+        "Schema mismatch during conversion"
+      ],
+      "prompts": [
+        "Architect a system integration between a TMS and Accounting software. Ensure all billable loads are synced exactly once. Deliverables: Sequence diagrams (mermaid), OpenAPI, Docker.",
+        "Design a robust sync service with retry logic and idempotency guards for moving load data to an accounting ledger. Provide service architecture.",
+        "Build a load-matching and sync engine. Use FastAPI to expose sync controls and define PostgreSQL schemas for tracking sync status."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D005",
+      "domain_name": "Payment Matching Engine",
+      "category": "Algorithm / Logic",
+      "problem_statement": "Develop an engine that matches incoming bank deposits to outstanding customer invoices based on Amount and Reference Number. Implement 'Fuzzy Matching' for common reference variations (e.g., extra spaces, prefix mismatch).",
+      "constraints": "Python 3.12, Levenshtein distance or Regex mapping, Decimal precision.",
+      "acceptance_criteria": [
+        "Input: List of Deposits and List of Invoices",
+        "Output: Ranked list of suggested matches",
+        "Threshold-based matching (score > 80%)",
+        "Manual override flag"
+      ],
+      "edge_cases": [
+        "Partial payments (deposit < invoice)",
+        "One deposit covering two invoices",
+        "Multiple invoices with identical amounts and no references"
+      ],
+      "prompts": [
+        "Design an algorithmic engine to match bank deposits to invoices. Requirements: amount parity, reference regex matching, and partial payment handling.",
+        "Build a matching logic service in Python. Create endpoints to ingest payloads and return matched pairs with confidence scores. Provide OpenAPI specs.",
+        "Architect a payment reconciliation logic layer. Define data schemas for Deposits/Invoices and implement a robust matching algorithm."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D006",
+      "domain_name": "Webhook Ingestion Service",
+      "category": "API Design",
+      "problem_statement": "Build a resilient service to receive incoming webhooks from external providers (e.g., Stripe, SendGrid). The service must verify payload signatures, queue them for offline processing, and return an immediate 202 Accepted.",
+      "constraints": "Python 3.12, HMAC signature verification, Background Tasks (FastAPI/Celery).",
+      "acceptance_criteria": [
+        "Endpoint /webhooks/{provider}",
+        "HMAC Signature Verification logic",
+        "Async queuing of payloads",
+        "Database logging of webhook status"
+      ],
+      "edge_cases": [
+        "Incorrect signature (must return 401)",
+        "Payload larger than 1MB",
+        "System overload (queue handling)"
+      ],
+      "prompts": [
+        "Design a high-security webhook ingestion service. Must verify provider signatures (HMAC) and offload processing to background tasks. Provide OpenAPI and Docker.",
+        "Architect a reusable webhook receiver in FastAPI. Include security headers, payload validation, and an internal job queue structure.",
+        "Implement a resilient listener for 3rd party webhooks. Focus on security, immediate response (202), and persistent queuing."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D007",
+      "domain_name": "Invoice Reconciliation Pipeline",
+      "category": "Data Pipeline",
+      "problem_statement": "Automate the reconciliation between an internal database and a monthly CSV bank statement. Group transactions by week, identify missing entries on either side, and generate a delta report.",
+      "constraints": "Python 3.12, Pandas or Pydantic for data manipulation, CSV/SQL integration.",
+      "acceptance_criteria": [
+        "Upload endpoint for CSV bank statements",
+        "Weekly grouping logic (aggregating amounts)",
+        "Detection of orphans (unmatched rows on either side)",
+        "Exportable JSON/PDF report"
+      ],
+      "edge_cases": [
+        "Zero transactions in a week",
+        "Mismatch in currency symbols/formats",
+        "Duplicate statement lines"
+      ],
+      "prompts": [
+        "Design a monthly reconciliation pipeline. Ingest bank CSVs and compare against internal SQL records. Generate a weekly mismatch report. Deliverables: OpenAPI, tool plan.",
+        "Architect a data comparison service for financial reconciliation. Focus on weekly aggregation logic and orphan detection. Provide Docker and YAML.",
+        "Build an automated invoice matching pipeline. Define the ingestion, comparison, and reporting logic with full API specifications."
+      ]
+    },
+    {
+      "domain_id": "BENCH-D008",
+      "domain_name": "Driver Settlement Calculator",
+      "category": "Algorithm / Logic",
+      "problem_statement": "Compute the payroll settlement for a fleet driver. Logic: Gross Pay - Fuel Deductions - Insurance Fees + Bonuses. Rules: Bonuses only apply if total miles > 2500, Fuel is deducted at standard rate unless a discount card was used.",
+      "constraints": "Python 3.12, Precise decimal arithmetic, Rule-based calculation.",
+      "acceptance_criteria": [
+        "Endpoint to calculate total settlement",
+        "Conditional bonus logic application",
+        "Fuel deduction overrides",
+        "JSON output of line-item breakdown"
+      ],
+      "edge_cases": [
+        "Negative settlement result (debt carry-over)",
+        "Missing mileage data (should error or fail safely)",
+        "Multiple fuel cards on one trip"
+      ],
+      "prompts": [
+        "Design a rule-based payroll engine for driver settlements. Implement conditional logic for bonuses and deductions. Deliverables: OpenAPI, logic schemas, Docker.",
+        "Create a payroll settlement calculator in FastAPI. Must accurately compute gross-to-net pay with complex line-items. Provide documentation and specs.",
+        "Architect a settlement logic service. Focus on arithmetic precision and rule-based deduction logic. Include service definitions."
+      ]
+    }
+  ]
+}
