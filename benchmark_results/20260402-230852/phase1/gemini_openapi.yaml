@@ -1,0 +1,207 @@
+openapi: 3.0.3
+info:
+  title: Product Wishlist API
+  description: A microservice for managing user product wishlists.
+  version: 1.0.0
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+tags:
+  - name: Wishlists
+    description: Operations related to user wishlists
+paths:
+  /wishlists:
+    get:
+      tags:
+        - Wishlists
+      summary: Get all wishlists for the authenticated user
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: A list of the user's wishlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Wishlist'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+        - Wishlists
+      summary: Create a new wishlist
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  example: "Summer Wardrobe"
+      responses:
+        '201':
+          description: Wishlist created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /wishlists/{wishlistId}:
+    get:
+      tags:
+        - Wishlists
+      summary: Get a specific wishlist
+      description: Retrieves the wishlist and its products. Fails if the wishlist does not belong to the user.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/wishlistId'
+      responses:
+        '200':
+          description: Wishlist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /wishlists/{wishlistId}/products:
+    post:
+      tags:
+        - Wishlists
+      summary: Add a product to the wishlist
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/wishlistId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - productId
+              properties:
+                productId:
+                  type: string
+                  format: uuid
+                  example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '201':
+          description: Product added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /wishlists/{wishlistId}/products/{productId}:
+    delete:
+      tags:
+        - Wishlists
+      summary: Remove a product from the wishlist
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/wishlistId'
+        - name: productId
+          in: path
+          required: true
+          description: UUID of the product to remove
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    wishlistId:
+      name: wishlistId
+      in: path
+      required: true
+      description: UUID of the wishlist
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ProductItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        addedAt:
+          type: string
+          format: date-time
+    Wishlist:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+          description: Identifies the owner. Handled by the backend via JWT.
+        name:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductItem'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+  responses:
+    BadRequest:
+      description: Invalid request payload or parameters
+    Unauthorized:
+      description: Missing or invalid authentication token
+    Forbidden:
+      description: Authenticated user does not have permission to access this resource
+    NotFound:
+      description: Resource not found

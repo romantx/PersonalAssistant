@@ -1,0 +1,2 @@
+
+The tests use a separate, in-memory SQLite database (`test.db`) that is created and destroyed for each test session, ensuring that tests are isolated.

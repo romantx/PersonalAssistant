@@ -1,6 +1,8 @@
 # 🤖 Personal Agent Team
 
-A fully autonomous, locally-hosted multi-agent AI environment. This project uses a sophisticated **LangGraph** orchestrator to dynamically route intents to the most capable AI models in the world — seamlessly blending Google, Anthropic, and OpenAI toolsets into a single cohesive interface.
+A fully autonomous, locally-hosted multi-agent AI environment. This project uses a sophisticated **LangGraph** orchestrator to dynamically route intents to the most capable AI models in the world — seamlessly blending Google, Anthropic, and xAI toolsets into a single cohesive interface, guarded by a brutal AI peer-review council.
+
+> **Architectural Note — Abstraction Layers:** The use of LangGraph abstraction layers to manage agent state and routing was a deliberate implementation choice to accelerate initial development speed, despite the general preference for direct SDK calls. Future system expansions will continue to isolate abstraction layers strictly to routing, maintaining direct un-abstracted SDK calls wherever possible for explicit tasks.
 
 ![Agent Team Diagram](https://img.shields.io/badge/Architecture-LangGraph-blue?style=for-the-badge)
 ![FastAPI Backend](https://img.shields.io/badge/Backend-FastAPI-green?style=for-the-badge)
@@ -10,19 +12,34 @@ A fully autonomous, locally-hosted multi-agent AI environment. This project uses
 
 The core of this system operates by avoiding a "one-model-fits-all" approach. Instead, an ultra-fast Master Router parses your request and maps it to specialized agents depending on the required logic.
 
-### 1. The Planner 🧠 (Gemini 2.5 Flash)
-Google's Gemini 2.5 Flash sits at the front of the pipeline. It reads your intent, natively searches the web if required, and drafts the overall logic blueprint. If the task requires execution, it flags a `HANDOFF_TO_CODER`.
+### 1. The Strategist 🧠 (Gemini 2.5 Pro)
+Google's Gemini 2.5 Pro sits at the front of the pipeline acting as the primary Strategist. It executes a strict OODA Loop (Observe, Orient, Validate, Decide, Act), handling full conversation history, generating plans, and locking to absolute `AgentType` Enum boundaries before dispatching control to sub-agents. 
 
-### 2. The Execution Engineer 💻 (Claude 3.7 Sonnet)
-Claude 3.7 Sonnet is universally known as the best coding model. It takes Gemini's blueprint and perfectly writes the script. It is equipped with a heavily sandboxed **Python Execution Tool**, allowing Claude to natively test and run background scripts directly on your local system filesystem.
+### 2. The Coding Agent 💻 (Claude 4 Sonnet)
+Claude 4 Sonnet acts as the dedicated Coding Agent, chosen for its unparalleled reasoning coherence in complex multi-file refactors. It receives the Strategist's blueprint and leverages native `bash_execute`, `read_file`, and `write_file` tools. *Security Constraint:* All file operations are strictly sandboxed via hardcoded ABSPATH guards to the `backend/agent-workspace/` directory to prevent host contamination.
 
-### 3. The Communications Agent 📬 (GPT-4o)
-To flawlessly read and send emails without facing strict AWS Bedrock proxy errors, this Agent utilizes GPT-4 Omni. It is physically bound to Python's native `imaplib` and `smtplib`.
+### 3. The LLM Council 🏛️ (PAP-ADD-001)
+For high-stakes architectural, financial, or career decisions, the system detours to the LLM Council. A prompt is parallel-dispatched to Claude, Gemini, and Grok 3 independently. Their responses are anonymized to strip provider bias and handed to a Gemini 2.5 Pro Chairman, which is hard-coded to deliver a hyper-critical, brutal synthesis identifying exact flaws in the logic without "participation trophies."
+
+### 4. The Communications Agent 📬 (Pending Phase)
+This logic block will handle quick drafting, intent understanding, and sending emails without over-engineering text generation.
 - **Proton Mail:** Connects locally to `127.0.0.1` via the Proton Bridge for end-to-end encrypted inbox management.
 - **Gmail:** Connects conventionally using TLS application passwords to manage standard inboxes.
 
-### 4. The Model Watcher 👁️ (Background Async Daemon)
-AI moves at lightning speed. To make sure you never fall behind, an asynchronous background cron-job queries the OpenRouter API every 24 hours. It builds a mathematical baseline matrix of current models and instantly alerts you if a ground-breaking new model drops that dethrones your current active stack.
+## 💾 SQLite State Layer & Concurrency
+The system leverages SQLite to maintain a highly persistent context. Following the Council's Phase 2 architectural review, SQLite was heavily optimized for a continuous asynchronous environment.
+
+**Concurrency Hardening:**
+- Enabled `PRAGMA journal_mode=WAL` and `synchronous=NORMAL`.
+- Bound `BEGIN IMMEDIATE` locks globally via SQLAlchemy event listeners to prevent dreaded `database is locked` deadlocks during multi-agent node traversal.
+
+| Table | Purpose |
+|---|---|
+| `conversations` | Full chat history per session, per agent |
+| `agent_runs` | Execution log. Includes `SHADOW_MODE` metric tracking and pipeline latency profiling |
+| `tasks` | Relational Task graph (Graph Node -> Parent Node), strictly bound by `AgentType` Enum routers |
+| `agent_state` | Strategist OODA persistent context across sessions |
+| `calendar_cache` | Local cache of Google Calendar events |
 
 ---
 
@@ -31,28 +48,13 @@ AI moves at lightning speed. To make sure you never fall behind, an asynchronous
 ### Prerequisites
 - Python 3.10+
 - Node.js
-- Local credentials for OpenRouter, Proton Bridge (optional), and Gmail App Passwords (optional).
+- Local credentials for Anthropic, Google AI Studio, and xAI (Grok).
 
 ### 1. Configure the Environment
-Ensure your `.env` file is set up correctly in the `backend/` directory:
-```properties
-# LLM Providers
-OPENROUTER_API_KEY="your_key"
-GEMINI_API_KEY="your_key"
-
-# Email Configuration
-PROTON_EMAIL="your_email@protonmail.com"
-PROTON_PASSWORD="your_bridge_credential"
-GMAIL_EMAIL="your_email@gmail.com"
-GMAIL_APP_PASSWORD="your_google_app_password"
-
-# Telegram Bot
-TELEGRAM_BOT_TOKEN="your_bot_token"
-```
+Ensure your `.env` file is set up correctly in the `backend/` directory by copying `.env.example` to `.env`. 
+*Note:* The orchestrator respects a `SHADOW_MODE=true` environment flag which forces the LangGraph router to mock traversals and log them to SQLite instead of firing expensive external tools. Turn to `false` for active execution.
 
 ### 2. Boot up the Team
-You no longer need to manually manage separate server instances. We built a unified startup script.
-
 From the root directory, simply run:
 ```bash
 .\start.bat
@@ -60,7 +62,5 @@ From the root directory, simply run:
 This will automatically launch the **FastAPI Backend** and the **React Dashboard** simultaneously. 
 
 ### 3. Start Chatting
-Once the two terminals finish bootstrapping, click or navigate to:
+Once the two terminals finish bootstrapping, navigate to:
 👉 **[http://localhost:5173/](http://localhost:5173/)**
-
-Type a prompt like *"Check my Gmail"* or *"Write a Python script that calculates Pi and execute it"* and watch the Multi-Agent pipeline go to work!

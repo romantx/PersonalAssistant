@@ -1,0 +1,11 @@
+
+## API Endpoints
+
+You can interact with the API using a tool like `curl`.
+
+#### Login User
+
+- **Endpoint**: `POST /login`
+- **Success Response**: `200 OK`
+
+**Example:**

@@ -1,0 +1,127 @@
+openapi: 3.0.0
+info:
+  title: Product Wishlist API
+  version: 1.0.0
+
+servers:
+  - url: http://api.example.com/v1
+
+paths:
+  /wishlists:
+    get:
+      summary: Get the authenticated user's wishlist
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:    
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+    post:
+      summary: Create a new wishlist
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewWishlist'
+      responses:
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+  /wishlists/{wishlistId}/products:
+    get:
+      summary: Get products in a wishlist
+      parameters:
+        - in: path
+          name: wishlistId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProductItem'
+    post:
+      summary: Add a product to a wishlist
+      parameters:
+        - in: path
+          name: wishlistId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewProductItem'
+      responses:
+        '201':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItem'
+    delete:
+      summary: Remove a product from a wishlist
+      parameters:
+        - in: path
+          name: wishlistId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: productId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Successful response
+
+components:
+  schemas:
+    Wishlist:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductItem'
+    NewWishlist:
+      type: object
+      properties:
+        name:
+          type: string
+    ProductItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+    NewProductItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid

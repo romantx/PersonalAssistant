@@ -1,0 +1,595 @@
+I'll design a comprehensive RESTful API for a Product Wishlist microservice. Here are the deliverables:
+
+## 1. OpenAPI 3.0 Specification
+
+```yaml
+openapi: 3.0.3
+info:
+  title: Product Wishlist API
+  description: A microservice for managing user product wishlists
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@wishlist.com
+
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Development server
+
+security:
+  - bearerAuth: []
+
+paths:
+  /wishlists:
+    post:
+      summary: Create a new wishlist
+      tags:
+        - Wishlists
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                  example: "My Favorite Products"
+                description:
+                  type: string
+                  maxLength: 500
+                  example: "Collection of products I want to buy"
+      responses:
+        '201':
+          description: Wishlist created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    get:
+      summary: Get all wishlists for the authenticated user
+      tags:
+        - Wishlists
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: List of user's wishlists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Wishlist'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /wishlists/{wishlistId}:
+    get:
+      summary: Get a specific wishlist
+      tags:
+        - Wishlists
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+      responses:
+        '200':
+          description: Wishlist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      summary: Update wishlist details
+      tags:
+        - Wishlists
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  maxLength: 100
+                description:
+                  type: string
+                  maxLength: 500
+      responses:
+        '200':
+          description: Wishlist updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Delete a wishlist
+      tags:
+        - Wishlists
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+      responses:
+        '204':
+          description: Wishlist deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /wishlists/{wishlistId}/products:
+    post:
+      summary: Add a product to wishlist
+      tags:
+        - Wishlist Items
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - productId
+              properties:
+                productId:
+                  type: string
+                  format: uuid
+                  example: "550e8400-e29b-41d4-a716-446655440000"
+                notes:
+                  type: string
+                  maxLength: 500
+                  example: "Size Large, Blue color preferred"
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  default: 3
+                  example: 4
+      responses:
+        '201':
+          description: Product added to wishlist successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Product already exists in wishlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+    get:
+      summary: Get all products in a wishlist
+      tags:
+        - Wishlist Items
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [createdAt, priority, productId]
+            default: createdAt
+        - name: sortOrder
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: List of products in wishlist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProductItem'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /wishlists/{wishlistId}/products/{productId}:
+    put:
+      summary: Update product item in wishlist
+      tags:
+        - Wishlist Items
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+        - $ref: '#/components/parameters/ProductId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  maxLength: 500
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+      responses:
+        '200':
+          description: Product item updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItem'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: Remove a product from wishlist
+      tags:
+        - Wishlist Items
+      parameters:
+        - $ref: '#/components/parameters/WishlistId'
+        - $ref: '#/components/parameters/ProductId'
+      responses:
+        '204':
+          description: Product removed from wishlist successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /health:
+    get:
+      summary: Health check endpoint
+      tags:
+        - Health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  timestamp:
+                    type: string
+                    format: date-time
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    WishlistId:
+      name: wishlistId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: "123e4567-e89b-12d3-a456-426614174000"
+
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+  schemas:
+    Wishlist:
+      type: object
+      required:
+        - id
+        - userId
+        - name
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        userId:
+          type: string
+          format: uuid
+          example: "987fcdeb-51a2-43d1-9f12-345678901234"
+        name:
+          type: string
+          maxLength: 100
+          example: "My Favorite Products"
+        description:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: "Collection of products I want to buy"
+        itemCount:
+          type: integer
+          minimum: 0
+          example: 5
+        createdAt:
+          type: string
+          format: date-time
+          example: "2023-12-01T10:30:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2023-12-01T15:45:00Z"
+        products:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductItem'
+
+    ProductItem:
+      type: object
+      required:
+        - productId
+        - wishlistId
+        - addedAt
+      properties:
+        productId:
+          type: string
+          format: uuid
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        wishlistId:
+          type: string
+          format: uuid
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        notes:
+          type: string
+          maxLength: 500
+          nullable: true
+          example: "Size Large, Blue color preferred"
+        priority:
+          type: integer
+          minimum: 1
+          maximum: 5
+          default: 3
+          example: 4
+        addedAt:
+          type: string
+          format: date-time
+          example: "2023-12-01T14:20:00Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2023-12-01T14:20:00Z"
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        limit:
+          type: integer
+          minimum: 1
+          example: 20
+        total:
+          type: integer
+          minimum: 0
+          example: 150
+        totalPages:
+          type: integer
+          minimum: 0
+          example: 8
+
+    Error:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          example: "Invalid input data"
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              message:
+                type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    Forbidden:
+      description: Forbidden - User can only access their own wishlists
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+```
+
+## 2. JSON Schema for Resources
+
+### Wishlist Schema
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://wishlist.com/schemas/wishlist.json",
+  "title": "Wishlist",
+  "description": "A user's product wishlist",
+  "type": "object",
+  "required": [
+    "id",
+    "userId",
+    "name",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the wishlist"
+    },
+    "userId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "ID of the user who owns this wishlist"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Name of the wishlist"
+    },
+    "description": {
+      "type": ["string", "null"],
+      "maxLength": 500,
+      "description": "Optional description of the wishlist"
+    },
+    "itemCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of products in this wishlist"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the wishlist was created"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the wishlist was last updated"
+    },
+    "products": {
+      "type": "array",
+      "description": "List of products in this wishlist",
+      "items": {
+        "$ref": "#/$defs/ProductItem"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ProductItem": {
+      "$ref": "https://wishlist.com/schemas/product-item.json"
+    }
+  }
+}
+```
+
+### ProductItem Schema
+```json
+{
+  "$schema": "http://

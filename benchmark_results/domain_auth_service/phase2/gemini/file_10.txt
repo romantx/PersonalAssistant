@@ -1,0 +1,9 @@
+
+## Prerequisites
+
+- Go (version 1.21 or later)
+- Docker (optional, for containerization)
+
+## Getting Started
+
+### 1. Clone the repository

@@ -1,0 +1,9 @@
+The API will be available at: http://127.0.0.1:8000
+Interactive OpenAPI Documentation (Swagger UI) is automatically available at: http://127.0.0.1:8000/docs
+
+**Note on Authentication:**
+To test via Swagger UI or curl, you must pass a mock Bearer token ending in `-token` (e.g., `john-token`, `alice-token`). The prefix will be parsed as the user's ID.
+
+## Running Tests
+
+Execute the test suite using pytest:

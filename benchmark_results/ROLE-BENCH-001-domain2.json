@@ -1,0 +1,54 @@
+{
+  "date": "20260402-232012",
+  "run_conditions": {
+    "docker_execution": "Skipped per user mandate.",
+    "spectral_validation": "Skipped or fallback.",
+    "phase2_openapi": "Baseline injected."
+  },
+  "model_versions_tested": {
+    "claude": "claude-sonnet-4-20250514",
+    "gemini": "gemini-2.5-pro"
+  },
+  "scores": {
+    "claude": {
+      "phase1_score": {
+        "openapi_spec_quality": 40,
+        "data_schema_quality": 15,
+        "configuration_quality": 30,
+        "total_phase1": 85
+      },
+      "phase2_score": {
+        "functional_correctness": 0,
+        "security": 25,
+        "code_quality": 15,
+        "total_phase2": 40,
+        "tool_execution_log": {
+          "pytest": "CRASH: Traceback (most recent call last):\n  File \"C:\\Users\\rbric\\Documents\\Agents Team\\Personal\\backend\\benchmarks\\aiq_benchmark.py\", line 262, in score_phase2\n    res = subprocess.run([pytest_bin, str(model_dir)], capture_output=True, text=True)\n  File \"C:\\Python314\\Lib\\subprocess.py\", line 554, in run\n    with Popen(*popenargs, **kwargs) as process:\n         ~~~~~^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Python314\\Lib\\subprocess.py\", line 1038, in __init__\n    self._execute_child(args, executable, preexec_fn, close_fds,\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        pass_fds, cwd, env,\n                        ^^^^^^^^^^^^^^^^^^^\n    ...<5 lines>...\n                        gid, gids, uid, umask,\n                        ^^^^^^^^^^^^^^^^^^^^^^\n                        start_new_session, process_group)\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Python314\\Lib\\subprocess.py\", line 1552, in _execute_child\n    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,\n                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n                             # no special security\n                             ^^^^^^^^^^^^^^^^^^^^^\n    ...<4 lines>...\n                             cwd,\n                             ^^^^\n                             startupinfo)\n                             ^^^^^^^^^^^^\nFileNotFoundError: [WinError 2] The system cannot find the file specified\n",
+          "bandit": "CRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified",
+          "pylint": "CRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified\\nCRASH: [WinError 2] The system cannot find the file specified"
+        }
+      }
+    },
+    "gemini": {
+      "phase1_score": {
+        "openapi_spec_quality": 40,
+        "data_schema_quality": 15,
+        "configuration_quality": 30,
+        "total_phase1": 85
+      },
+      "phase2_score": {
+        "functional_correctness": 0,
+        "security": 25,
+        "code_quality": 15,
+        "total_phase2": 40,
+        "tool_execution_log": {
+          "pytest": "CRASH: Traceback (most recent call last):\n  File \"C:\\Users\\rbric\\Documents\\Agents Team\\Personal\\backend\\benchmarks\\aiq_benchmark.py\", line 262, in score_phase2\n    res = subprocess.run([pytest_bin, str(model_dir)], capture_output=True, text=True)\n  File \"C:\\Python314\\Lib\\subprocess.py\", line 554, in run\n    with Popen(*popenargs, **kwargs) as process:\n         ~~~~~^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Python314\\Lib\\subprocess.py\", line 1038, in __init__\n    self._execute_child(args, executable, preexec_fn, close_fds,\n    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        pass_fds, cwd, env,\n                        ^^^^^^^^^^^^^^^^^^^\n    ...<5 lines>...\n                        gid, gids, uid, umask,\n                        ^^^^^^^^^^^^^^^^^^^^^^\n                        start_new_session, process_group)\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Python314\\Lib\\subprocess.py\", line 1552, in _execute_child\n    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,\n                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n                             # no special security\n                             ^^^^^^^^^^^^^^^^^^^^^\n    ...<4 lines>...\n                             cwd,\n                             ^^^^\n                             startupinfo)\n                             ^^^^^^^^^^^^\nFileNotFoundError: [WinError 2] The system cannot find the file specified\n",
+          "bandit": "CRASH: [WinError 2] The system cannot find the file specified",
+          "pylint": "CRASH: [WinError 2] The system cannot find the file specified"
+        }
+      }
+    }
+  },
+  "decision_outcome": "Ambiguous. Run benchmark twice more with different problem domains, average results.",
+  "role_assignments_changed": false
+}

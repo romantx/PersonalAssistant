@@ -1,0 +1,4 @@
+
+### 2. Run the Docker container
+
+This command runs the container and maps port `8080` from the container to port `8080` on your host machine.

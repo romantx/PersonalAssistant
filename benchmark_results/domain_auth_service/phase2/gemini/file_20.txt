@@ -1,0 +1,2 @@
+
+You can then test the endpoints with `curl` as shown above.

@@ -6,6 +6,21 @@ from langchain_core.tools import tool
 from state import AgentState
 from config import settings
 from email_tools import read_emails, send_email
+from duckduckgo_search import DDGS
+from tools.xai_tools import search_x
+import asyncio
+
+@tool
+def search_web(query: str) -> str:
+    """Searches the web using DuckDuckGo."""
+    try:
+        results = DDGS().text(query, max_results=3)
+        res_list = list(results)
+        if not res_list:
+            return "No results found. The search engine might be blocking the request. Do not retry the exact same search."
+        return str(res_list)
+    except Exception as e:
+        return f"Search error: {str(e)}"
 
 @tool
 def execute_python_code(code: str) -> str:
@@ -35,7 +50,8 @@ def get_coder_llm():
 def get_planner_llm():
     if not settings.gemini_api_key or settings.gemini_api_key.startswith("your"):
         return None
-    return ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key=settings.gemini_api_key)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", api_key=settings.gemini_api_key)
+    return llm.bind_tools([search_web, search_x])
 
 def research_agent(state: AgentState):
     """The Gemini Planner that researches and writes plans."""
@@ -44,11 +60,40 @@ def research_agent(state: AgentState):
     if not llm:
         return {"messages": [AIMessage(content="[Planner Stub]: Gemini API Key missing.")], "next_agent": "end"}
     
-    prompt = "You are the Gemini Planner. Analyze the user's request. If it requires coding, output a detailed plan and append the exact phrase 'HANDOFF_TO_CODER' at the very end. If it does NOT require coding, just answer normally."
+    prompt = "You are the Gemini Planner. Analyze the user's request. You have access to a web search tool if needed. If it requires coding, output a detailed plan and append the exact phrase 'HANDOFF_TO_CODER' at the very end. If it does NOT require coding, just answer normally."
     api_messages = [SystemMessage(content=prompt)] + list(messages)
     try:
         response = llm.invoke(api_messages)
+        
+        api_messages.append(response)
+        
+        iterations = 0
+        while hasattr(response, 'tool_calls') and response.tool_calls and iterations < 3:
+            for tool_call in response.tool_calls:
+                if tool_call["name"] == "search_web":
+                    tool_result = search_web.invoke(tool_call["args"])
+                    api_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
+                elif tool_call["name"] == "search_x":
+                    tool_result = search_x.invoke(tool_call["args"])
+                    api_messages.append(ToolMessage(content=str(tool_result), tool_call_id=tool_call["id"]))
+            
+            response = llm.invoke(api_messages)
+            api_messages.append(response)
+            iterations += 1
+            
         res_text = response.content
+        if isinstance(res_text, list):
+            extracted = []
+            for item in res_text:
+                if isinstance(item, dict) and "text" in item:
+                    extracted.append(item["text"])
+                elif isinstance(item, str):
+                    extracted.append(item)
+            res_text = " ".join(extracted)
+            
+        if not res_text.strip():
+            res_text = "I performed a search but could not find a conclusive open-text answer without further tools."
+
         next_agent = "end"
         active_plan = state.get("active_plan", "")
         

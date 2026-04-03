@@ -7,40 +7,51 @@ This document tracks the ongoing development of the Personal Agent Team system. 
 - [x] Initialize frontend (React + Vite)
 - [x] Initialize backend structure (Python)
 
-## Phase 2: Backend Core (FastAPI & LangGraph)
-- [x] Define agent state definitions (`backend/state.py`)
-- [x] Setup configuration management (`backend/config.py`)
-- [x] Implement Agent Router / Orchestrator
+## Phase 2: Architecture Refactoring (Council Mandate)
+- [x] Refactor SQLite schema to relational Task Graph (PAP-ADD-001 recommendations)
+- [x] Implement SQLite Concurrency Fixes (IMMEDIATE, WAL)
+- [x] Build Core LangGraph OODA Loop (with Mock Act Node)
+
+## Phase 3: Agent Nodes & Tools
 - [x] Build Research Agent Node
 - [x] Build Coding Agent Node
-- [/] Build Communications Agent Node
+- [x] Integrate LLM Council Node (PAP-ADD-001)
+- [ ] Build Communications Agent Node
 
-## Phase 3: AI Inference & Providers
+## Phase 4: AI Inference & Providers
 - [x] Integrate OpenRouter API
 - [x] Integrate Gemini API (Native Search Grounding)
 - [ ] Implement SQLite database tracking
 - [ ] Build Model Evaluation / Update Loop
 
-**User Responsibilities (Blockers for Phase 3):**
+**User Responsibilities (Blockers for Phase 4):**
 - [x] **OpenRouter:** Generate an API Key (and add credits).
 - [x] **Gemini:** Generate a Google AI Studio API Key.
 - [x] **(Optional) Grok:** Generate an X/Grok API Key.
 
-## Phase 4: Frontend Development
+## Phase 5: Frontend Development
 - [ ] Implement base layout and theming (Dynamic UI)
 - [ ] Build chat/messaging interface
 - [ ] Connect frontend to FastAPI backend
 
-## Phase 5: External Interfaces
+## Phase 6: External Interfaces
 - [x] Implement Telegram Bot endpoint & worker
 - [x] Connect Proton Mail Bridge (IMAP/SMTP)
-- [ ] Connect Google Mail API (OAuth/App Password)
+- [x] Connect Google Mail API (OAuth/App Password)
 
 **User Responsibilities (Blockers for Phase 5):**
 - [x] **Telegram Bot Token:** Create an app via `@BotFather`.
 - [x] **Telegram User ID:** Locate via `@userinfobot`.
 - [x] **Proton Bridge Credentials:** Install local Bridge and retrieve IMAP/SMTP host/pass.
 - [x] **Gmail App Password:** Generate via Google Account Settings.
+
+## Phase 7: Model Benchmarking & System Evaluation (ROLE-BENCH)
+- [x] Execute ROLE-BENCH-001 (Microservice APIs)
+- [x] Process LLM Council Verdict & Design ROLE-BENCH-002 Specification
+- [x] Initialize Docker containerization environment (Dockerfile, requirements)
+- [ ] Install Docker & WSL2 on Host Machine (Blocked on reboot)
+- [ ] Author Domain Catalog & Pytest Suites
+- [ ] Re-run ROLE-BENCH-002 within Docker secure sandbox
 
 ---
 *Legend:*

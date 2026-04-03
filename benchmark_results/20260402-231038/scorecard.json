@@ -1,0 +1,44 @@
+{
+  "date": "20260402-231038",
+  "run_conditions": {
+    "docker_execution": "Skipped per user mandate. Executed pytest, bandit, pylint in local venv.",
+    "spectral_validation": "Attempted locally, fallback to YAML parsing if missing.",
+    "phase2_openapi": "Baseline generated and saved to benchmark_results/baseline_openapi.yaml."
+  },
+  "model_versions_tested": {
+    "claude": "claude-3-opus-20240229",
+    "gemini": "gemini-1.5-pro"
+  },
+  "scores": {
+    "claude": {
+      "phase1_score": {
+        "openapi_spec_quality": 15,
+        "data_schema_quality": 30,
+        "configuration_quality": 30,
+        "total_phase1": 75
+      },
+      "phase2_score": {
+        "functional_correctness": 20,
+        "security": 0,
+        "code_quality": 0,
+        "total_phase2": 20
+      }
+    },
+    "gemini": {
+      "phase1_score": {
+        "openapi_spec_quality": 30,
+        "data_schema_quality": 30,
+        "configuration_quality": 30,
+        "total_phase1": 90
+      },
+      "phase2_score": {
+        "functional_correctness": 20,
+        "security": 0,
+        "code_quality": 0,
+        "total_phase2": 20
+      }
+    }
+  },
+  "decision_outcome": "Ambiguous. Run benchmark twice more with different problem domains, average results.",
+  "role_assignments_changed": false
+}

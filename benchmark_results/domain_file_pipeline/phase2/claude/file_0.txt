@@ -1,0 +1,19 @@
+file-pipeline-api/
+├── src/
+│   ├── main.py
+│   ├── models.py
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── file_service.py
+│   │   └── job_service.py
+│   └── config.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_main.py
+│   ├── test_file_service.py
+│   └── test_job_service.py
+├── requirements.txt
+├── docker-compose.yml
+├── Dockerfile
+├── .env.example
+└── README.md

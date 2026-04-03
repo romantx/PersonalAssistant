@@ -8,3 +8,5 @@ langchain-anthropic
 python-telegram-bot
 python-dotenv
 httpx
+SQLAlchemy
+langgraph-checkpoint-sqlite

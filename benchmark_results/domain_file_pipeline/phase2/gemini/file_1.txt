@@ -1,0 +1,12 @@
+# Web Framework
+fastapi
+uvicorn[standard]
+python-multipart
+
+# Async Task Queue
+celery
+redis
+
+# Testing
+pytest
+httpx

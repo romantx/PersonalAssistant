@@ -1,0 +1,8 @@
+# Strict pinning of measurement tools to ensure identical executions
+pytest==8.2.2
+bandit==1.7.9
+pylint==3.2.3
+radon==6.0.1
+black==24.4.2
+jsonschema==4.22.0
+pyyaml==6.0.1

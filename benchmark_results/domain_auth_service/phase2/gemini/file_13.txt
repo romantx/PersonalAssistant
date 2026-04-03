@@ -1,0 +1,5 @@
+The server will start on `http://localhost:8080`.
+
+### 4. Run unit tests
+
+To verify that the handlers are working as expected:

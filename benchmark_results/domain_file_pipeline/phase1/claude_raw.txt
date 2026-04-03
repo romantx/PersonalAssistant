@@ -1,0 +1,596 @@
+I'll design and implement a comprehensive file upload and processing service. Here's the complete solution:
+
+## OpenAPI 3.0 Specification
+
+```yaml
+# openapi.yaml
+openapi: 3.0.3
+info:
+  title: File Processing Service
+  description: A service for uploading files, processing them asynchronously, and tracking their status
+  version: 1.0.0
+  contact:
+    name: File Processing API
+    email: api@fileprocessing.com
+
+servers:
+  - url: http://localhost:8000
+    description: Development server
+
+paths:
+  /upload:
+    post:
+      summary: Upload a file for processing
+      description: Upload a file that will be queued for asynchronous metadata extraction
+      operationId: uploadFile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The file to upload
+                description:
+                  type: string
+                  description: Optional description for the file
+              required:
+                - file
+      responses:
+        '201':
+          description: File uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: File too large
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /status/{job_id}:
+    get:
+      summary: Get processing status
+      description: Retrieve the current status and results of a file processing job
+      operationId: getStatus
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          description: The unique identifier of the processing job
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Status retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /jobs:
+    get:
+      summary: List all jobs
+      description: Retrieve a list of all file processing jobs
+      operationId: listJobs
+      parameters:
+        - name: status
+          in: query
+          required: false
+          description: Filter jobs by status
+          schema:
+            $ref: '#/components/schemas/JobStatus'
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of jobs to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Number of jobs to skip
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Jobs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+
+components:
+  schemas:
+    UploadResponse:
+      type: object
+      required:
+        - job_id
+        - status
+        - message
+        - created_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+          description: Unique identifier for the processing job
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        message:
+          type: string
+          description: Human-readable message about the upload
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp when the job was created
+
+    StatusResponse:
+      type: object
+      required:
+        - job_id
+        - status
+        - created_at
+        - updated_at
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        file_metadata:
+          $ref: '#/components/schemas/FileMetadata'
+        error_message:
+          type: string
+          nullable: true
+          description: Error message if processing failed
+        original_filename:
+          type: string
+        file_size:
+          type: integer
+        description:
+          type: string
+          nullable: true
+
+    FileMetadata:
+      type: object
+      nullable: true
+      properties:
+        filename:
+          type: string
+        size:
+          type: integer
+          description: File size in bytes
+        mime_type:
+          type: string
+        extension:
+          type: string
+        checksum:
+          type: string
+          description: SHA-256 checksum of the file
+        dimensions:
+          type: object
+          nullable: true
+          properties:
+            width:
+              type: integer
+            height:
+              type: integer
+        duration:
+          type: number
+          nullable: true
+          description: Duration in seconds for audio/video files
+        additional_properties:
+          type: object
+          additionalProperties: true
+          description: Additional metadata specific to file type
+
+    JobStatus:
+      type: string
+      enum:
+        - pending
+        - processing
+        - completed
+        - failed
+      description: Current status of the processing job
+
+    JobListResponse:
+      type: object
+      required:
+        - jobs
+        - total
+        - limit
+        - offset
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatusResponse'
+        total:
+          type: integer
+          description: Total number of jobs
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional error details
+```
+
+## JSON Schemas
+
+```json
+{
+  "upload_request_schema.json": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "file": {
+        "type": "string",
+        "format": "binary"
+      },
+      "description": {
+        "type": "string",
+        "maxLength": 500
+      }
+    },
+    "required": ["file"]
+  }
+}
+```
+
+```json
+{
+  "file_metadata_schema.json": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "filename": {
+        "type": "string"
+      },
+      "size": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "mime_type": {
+        "type": "string"
+      },
+      "extension": {
+        "type": "string"
+      },
+      "checksum": {
+        "type": "string",
+        "pattern": "^[a-fA-F0-9]{64}$"
+      },
+      "dimensions": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": ["width", "height"]
+      },
+      "duration": {
+        "type": "number",
+        "minimum": 0
+      },
+      "additional_properties": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "required": ["filename", "size", "mime_type", "checksum"]
+  }
+}
+```
+
+## Docker Compose Configuration
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://fileprocessor:fileprocessor123@postgres:5432/fileprocessor
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=50MB
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: python worker.py
+    environment:
+      - DATABASE_URL=postgresql://fileprocessor:fileprocessor123@postgres:5432/fileprocessor
+      - REDIS_URL=redis://redis:6379/0
+      - UPLOAD_DIR=/app/uploads
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    scale: 2
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=fileprocessor
+      - POSTGRES_USER=fileprocessor
+      - POSTGRES_PASSWORD=fileprocessor123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fileprocessor -d fileprocessor"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+```
+
+## Database Initialization
+
+```sql
+-- init.sql
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TYPE job_status AS ENUM ('pending', 'processing', 'completed', 'failed');
+
+CREATE TABLE IF NOT EXISTS file_processing_jobs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    original_filename VARCHAR(255) NOT NULL,
+    file_path VARCHAR(500) NOT NULL,
+    file_size BIGINT NOT NULL,
+    description TEXT,
+    status job_status NOT NULL DEFAULT 'pending',
+    file_metadata JSONB,
+    error_message TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_file_jobs_status ON file_processing_jobs(status);
+CREATE INDEX idx_file_jobs_created_at ON file_processing_jobs(created_at);
+CREATE INDEX idx_file_jobs_updated_at ON file_processing_jobs(updated_at);
+
+-- Function to automatically update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+CREATE TRIGGER update_file_processing_jobs_updated_at
+    BEFORE UPDATE ON file_processing_jobs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+## Main Application
+
+```python
+# main.py
+import os
+import uuid
+import hashlib
+import mimetypes
+from datetime import datetime
+from pathlib import Path
+from typing import Optional, List
+
+import uvicorn
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Query, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import asyncpg
+import aioredis
+from pydantic import BaseModel, Field
+from enum import Enum
+
+# Configuration
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://fileprocessor:fileprocessor123@localhost:5432/fileprocessor")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "50")) * 1024 * 1024  # 50MB default
+
+# Ensure upload directory exists
+UPLOAD_DIR.mkdir(exist_ok=True)
+
+app = FastAPI(
+    title="File Processing Service",
+    description="A service for uploading files, processing them asynchronously, and tracking their status",
+    version="1.0.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class JobStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class FileMetadata(BaseModel):
+    filename: str
+    size: int
+    mime_type: str
+    extension: str
+    checksum: str
+    dimensions: Optional[dict] = None
+    duration: Optional[float] = None
+    additional_properties: Optional[dict] = None
+
+class UploadResponse(BaseModel):
+    job_id: str
+    status: JobStatus
+    message: str
+    created_at: datetime
+
+class StatusResponse(BaseModel):
+    job_id: str
+    status: JobStatus
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime] = None
+    file_metadata: Optional[FileMetadata] = None
+    error_message: Optional[str] = None
+    original_filename: str
+    file_size: int
+    description: Optional[str] = None
+
+class JobListResponse(BaseModel):
+    jobs: List[StatusResponse]
+    total: int
+    limit: int
+    offset: int
+
+class ErrorResponse(BaseModel):
+    error: str
+    message: str
+    details: Optional[dict] = None
+
+# Database connection pool
+db_pool = None
+redis_client = None
+
+@app.on_event("startup")
+async def startup():
+    global db_pool, redis_client
+    db_pool = await asyncpg.create_pool(DATABASE_URL, min_size=5, max_size=20)
+    redis_client = await aioredis.from_url(REDIS_URL)
+
+@app.on_event("shutdown")
+async def shutdown():
+    global db_pool, redis_client
+    if db_pool:
+        await db_pool.close()
+    if redis_client:
+        await redis_client.close()
+
+async def get_db():
+    async with db_pool.acquire() as connection:
+        yield connection
+
+def calculate_file_hash(file_path: Path) -> str:
+    """Calculate SHA-256 hash of file"""
+    hash_sha256 = hashlib.sha256()
+    with open

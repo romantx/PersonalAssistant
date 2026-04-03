@@ -1,0 +1,853 @@
+Of course. Here is a complete design and implementation for an asynchronous file processing service.
+
+### System Architecture
+
+The service is designed using a microservices architecture to decouple the web-facing API from the background processing task.
+
+1.  **API Service (`api`)**: A Python FastAPI application that handles HTTP requests. Its sole responsibilities are:
+    *   Accepting `POST /upload` requests with a file.
+    *   Creating a job entry in the PostgreSQL database with a `QUEUED` status.
+    *   Saving the uploaded file to a shared volume.
+    *   Publishing a message with the `job_id` to a RabbitMQ queue.
+    *   Responding immediately to the client with the `job_id`.
+    *   Handling `GET /status/{job_id}` requests to fetch job status from the database.
+
+2.  **Worker Service (`worker`)**: A Python script that acts as a consumer.
+    *   Listens for messages on the RabbitMQ queue.
+    *   When a message is received, it updates the job status to `PROCESSING`.
+    *   It reads the corresponding file from the shared volume.
+    *   It uses the `hachoir` library to extract metadata from the file.
+    *   It updates the job record in PostgreSQL with the extracted metadata and sets the status to `COMPLETED` or `FAILED`.
+
+3.  **PostgreSQL (`postgres`)**: The relational database for storing job information, including status and the final metadata (stored in a `JSONB` column).
+
+4.  **RabbitMQ (`rabbitmq`)**: A message broker that queues jobs, ensuring that file uploads can be accepted quickly without waiting for processing to complete.
+
+5.  **Shared Volume (`uploads`)**: A Docker volume mounted by both the `api` and `worker` services, allowing the `api` to write files and the `worker` to read them.
+
+This architecture is robust, scalable, and resilient. If the worker fails, the message remains in the queue (or is re-queued) to be processed later.
+
+---
+
+### 1. OpenAPI 3.0 Specification
+
+This specification defines the API endpoints, request bodies, and response schemas.
+
+```yaml
+# openapi.yaml
+openapi: 3.0.3
+info:
+  title: File Metadata Extraction Service
+  description: An API to upload files for asynchronous metadata extraction.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8000
+    description: Development server
+paths:
+  /upload:
+    post:
+      tags:
+        - Jobs
+      summary: Upload a file for processing
+      description: Accepts a file, queues it for metadata extraction, and returns a job ID.
+      operationId: upload_file_upload_post
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+        required: true
+      responses:
+        '202':
+          description: File accepted for processing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobCreatedResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /status/{job_id}:
+    get:
+      tags:
+        - Jobs
+      summary: Get the status and result of a job
+      description: Retrieves the current status and extracted metadata for a given job ID.
+      operationId: get_status_status__job_id__get
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+        '404':
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: Job not found
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    JobCreatedResponse:
+      title: JobCreatedResponse
+      required:
+        - job_id
+        - status_url
+      type: object
+      properties:
+        job_id:
+          title: Job Id
+          type: string
+          format: uuid
+        status_url:
+          title: Status Url
+          type: string
+          format: uri
+          example: "/status/a1b2c3d4-e5f6-7890-1234-567890abcdef"
+    JobStatusResponse:
+      title: JobStatusResponse
+      required:
+        - id
+        - original_filename
+        - status
+        - created_at
+        - updated_at
+      type: object
+      properties:
+        id:
+          title: Id
+          type: string
+          format: uuid
+        original_filename:
+          title: Original Filename
+          type: string
+        status:
+          title: Status
+          type: string
+          enum:
+            - QUEUED
+            - PROCESSING
+            - COMPLETED
+            - FAILED
+        metadata:
+          title: Metadata
+          type: object
+          nullable: true
+        created_at:
+          title: Created At
+          type: string
+          format: date-time
+        updated_at:
+          title: Updated At
+          type: string
+          format: date-time
+    HTTPValidationError:
+      title: HTTPValidationError
+      type: object
+      properties:
+        detail:
+          title: Detail
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+    ValidationError:
+      title: ValidationError
+      required:
+        - loc
+        - msg
+        - type
+      type: object
+      properties:
+        loc:
+          title: Location
+          type: array
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+        msg:
+          title: Message
+          type: string
+        type:
+          title: Error Type
+          type: string
+```
+
+---
+
+### 2. JSON Schemas
+
+These are the formal schemas for the API responses, derived from the OpenAPI specification.
+
+**`schemas/JobCreatedResponse.json`**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JobCreatedResponse",
+  "type": "object",
+  "required": [
+    "job_id",
+    "status_url"
+  ],
+  "properties": {
+    "job_id": {
+      "type": "string",
+      "format": "uuid",
+      "title": "Job ID"
+    },
+    "status_url": {
+      "type": "string",
+      "format": "uri",
+      "title": "Status URL",
+      "example": "/status/a1b2c3d4-e5f6-7890-1234-567890abcdef"
+    }
+  }
+}
+```
+
+**`schemas/JobStatusResponse.json`**
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JobStatusResponse",
+  "type": "object",
+  "required": [
+    "id",
+    "original_filename",
+    "status",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "title": "Job ID"
+    },
+    "original_filename": {
+      "type": "string",
+      "title": "Original Filename"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["QUEUED", "PROCESSING", "COMPLETED", "FAILED"],
+      "title": "Job Status"
+    },
+    "metadata": {
+      "type": ["object", "null"],
+      "title": "Extracted Metadata"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Creation Timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Last Update Timestamp"
+    }
+  }
+}
+```
+
+---
+
+### 3. Docker Compose Configuration
+
+This file orchestrates all the services required to run the application.
+
+**`docker-compose.yml`**
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fileproc_postgres
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: fileproc_rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"   # AMQP port
+      - "15672:15672" # Management UI
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./src
+      dockerfile: api/Dockerfile
+    container_name: fileproc_api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+    env_file:
+      - .env
+
+  worker:
+    build:
+      context: ./src
+      dockerfile: worker/Dockerfile
+    container_name: fileproc_worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - uploads:/app/uploads
+    env_file:
+      - .env
+
+volumes:
+  postgres_data:
+  uploads:
+```
+
+---
+
+### 4. Full Implementation
+
+Here is the complete source code for the project.
+
+#### Project Structure
+```
+.
+├── .env.example
+├── docker-compose.yml
+├── openapi.yaml
+├── schemas/
+│   ├── JobCreatedResponse.json
+│   └── JobStatusResponse.json
+└── src/
+    ├── api/
+    │   ├── Dockerfile
+    │   └── main.py
+    ├── shared/
+    │   ├── __init__.py
+    │   ├── config.py
+    │   ├── database.py
+    │   └── models.py
+    ├── worker/
+    │   ├── Dockerfile
+    │   └── main.py
+    └── requirements.txt
+```
+
+#### Environment Variables
+
+Create a file named `.env` in the root directory (copy from `.env.example`).
+
+**`.env.example`**
+```
+# PostgreSQL Settings
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=fileprocdb
+POSTGRES_HOST=postgres
+
+# RabbitMQ Settings
+RABBITMQ_USER=user
+RABBITMQ_PASSWORD=password
+RABBITMQ_HOST=rabbitmq
+RABBITMQ_QUEUE=file_processing_queue
+
+# Application Settings
+UPLOAD_DIR=/app/uploads
+```
+
+#### Shared Code
+
+**`src/requirements.txt`**
+```
+fastapi==0.104.1
+uvicorn[standard]==0.24.0.post1
+sqlalchemy[asyncio]==2.0.23
+asyncpg==0.28.0
+psycopg2-binary==2.9.9
+pydantic[email]==2.5.2
+pydantic-settings==2.1.0
+pika==1.3.2
+python-multipart==0.0.6
+hachoir==3.1.2
+alembic==1.12.1
+```
+
+**`src/shared/config.py`**
+```python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    POSTGRES_HOST: str
+    DATABASE_URL: str = ""
+
+    RABBITMQ_USER: str
+    RABBITMQ_PASSWORD: str
+    RABBITMQ_HOST: str
+    RABBITMQ_QUEUE: str
+    RABBITMQ_URL: str = ""
+
+    UPLOAD_DIR: str
+
+    class Config:
+        env_file = ".env"
+
+    def __init__(self, **values):
+        super().__init__(**values)
+        self.DATABASE_URL = f"postgresql+asyncpg://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_HOST}/{self.POSTGRES_DB}"
+        self.RABBITMQ_URL = f"amqp://{self.RABBITMQ_USER}:{self.RABBITMQ_PASSWORD}@{self.RABBITMQ_HOST}/"
+
+settings = Settings()
+```
+
+**`src/shared/database.py`**
+```python
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker, declarative_base
+from .config import settings
+
+engine = create_async_engine(settings.DATABASE_URL, echo=False)
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+Base = declarative_base()
+
+async def get_db():
+    async with AsyncSessionLocal() as session:
+        yield session
+```
+
+**`src/shared/models.py`**
+```python
+import uuid
+import enum
+from datetime import datetime
+from sqlalchemy import Column, String, DateTime, func
+from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.types import Enum
+from .database import Base
+
+class StatusEnum(str, enum.Enum):
+    QUEUED = "QUEUED"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+class Job(Base):
+    __tablename__ = "jobs"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    original_filename = Column(String, nullable=False)
+    status = Column(Enum(StatusEnum), default=StatusEnum.QUEUED, nullable=False)
+    metadata = Column(JSONB, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, server_default=func.now())
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, server_default=func.now())
+```
+
+#### API Service
+
+**`src/api/Dockerfile`**
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN addgroup --system app && adduser --system --group app
+RUN chown -R app:app /app
+
+# Ensure uploads directory exists and has correct permissions
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
+
+USER app
+
+COPY . .
+
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+**`src/api/main.py`**
+```python
+import uuid
+import pika
+import shutil
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from pydantic import BaseModel, Field
+
+from shared.database import get_db, engine
+from shared.models import Job, Base, StatusEnum
+from shared.config import settings
+
+# --- Pydantic Models for API responses ---
+
+class JobCreatedResponse(BaseModel):
+    job_id: uuid.UUID
+    status_url: str = Field(..., example="/status/a1b2c3d4-e5f6-7890-1234-567890abcdef")
+
+class JobStatusResponse(BaseModel):
+    id: uuid.UUID
+    original_filename: str
+    status: StatusEnum
+    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+# --- FastAPI App Initialization ---
+
+app = FastAPI(
+    title="File Metadata Extraction Service",
+    description="An API to upload files for asynchronous metadata extraction.",
+    version="1.0.0"
+)
+
+# --- Database Initialization ---
+
+@app.on_event("startup")
+async def startup():
+    async with engine.begin() as conn:
+        # For a real app, use Alembic migrations instead of create_all
+        await conn.run_sync(Base.metadata.create_all)
+    Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
+
+
+# --- RabbitMQ Connection ---
+def get_rabbitmq_connection():
+    return pika.BlockingConnection(pika.URLParameters(settings.RABBITMQ_URL))
+
+# --- API Endpoints ---
+
+@app.post("/upload", response_model=JobCreatedResponse, status_code=202)
+async def upload_file(
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    job_id = uuid.uuid4()
+    file_extension = Path(file.filename).suffix
+    saved_filename = f"{job_id}{file_extension}"
+    file_path = Path(settings.UPLOAD_DIR) / saved_filename
+
+    # Save the file to the shared volume
+    try:
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    finally:
+        file.file.close()
+
+    # Create a job record in the database
+    new_job = Job(
+        id=job_id,
+        original_filename=file.filename,
+        status=StatusEnum.QUEUED
+    )
+    db.add(new_job)
+    await db.commit()
+    await db.refresh(new_job)
+
+    # Publish job_id to RabbitMQ
+    try:
+        connection = get_rabbitmq_connection()
+        channel = connection.channel()
+        channel.queue_declare(queue=settings.RABBITMQ_QUEUE, durable=True)
+        channel.basic_publish(
+            exchange='',
+            routing_key=settings.RABBITMQ_QUEUE,
+            body=str(job_id),
+            properties=pika.BasicProperties(delivery_mode=pika.DeliveryMode.Persistent)
+        )
+        connection.close()
+    except Exception as e:
+        # If queuing fails, mark job as failed and raise an error
+        new_job.status = StatusEnum.FAILED
+        await db.commit()
+        raise HTTPException(status_code=500, detail=f"Could not queue job: {e}")
+
+    return {
+        "job_id": job_id,
+        "status_url": request.url_for('get_status', job_id=str(job_id))
+    }
+
+
+@app.get("/status/{job_id}", response_model=JobStatusResponse)
+async def get_status(job_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return job
+```
+
+#### Worker Service
+
+**`src/worker/Dockerfile`**
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN addgroup --system app && adduser --system --group app
+RUN chown -R app:app /app
+
+# Ensure uploads directory exists and has correct permissions
+RUN mkdir -p /app/uploads && chown -R app:app /app/uploads
+
+USER app
+
+COPY . .
+
+CMD ["python", "worker/main.py"]
+```
+
+**`src/worker/main.py`**
+```python
+import uuid
+import pika
+import time
+import json
+from pathlib import Path
+from hachoir.parser import createParser
+from hachoir.metadata import extractMetadata
+
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.future import select
+
+from shared.models import Job, StatusEnum
+from shared.config import settings
+
+# --- Database Setup (separate from FastAPI's) ---
+engine = create_async_engine(settings.DATABASE_URL)
+AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+# --- Metadata Extraction Logic ---
+def extract_file_metadata(file_path: Path) -> dict:
+    """Extracts metadata from a file using Hachoir."""
+    metadata_dict = {}
+    parser = createParser(str(file_path))
+    if not parser:
+        return {"error": "Unable to create parser for this file type."}
+
+    with parser:
+        try:
+            metadata = extractMetadata(parser)
+            if not metadata:
+                 return {"error": "Unable to extract metadata."}
+
+            for key, value in metadata.exportDictionary().items():
+                if isinstance(value, list) and value:
+                    # Hachoir often returns lists, take the first item's text
+                    metadata_dict[key] = value[0].text
+                elif hasattr(value, 'text'):
+                    metadata_dict[key] = value.text
+                else:
+                    metadata_dict[key] = str(value)
+
+        except Exception as err:
+            return {"error": f"Metadata extraction failed: {err}"}
+    return metadata_dict
+
+# --- RabbitMQ Consumer Logic ---
+async def process_job(job_id_str: str):
+    """The core logic for processing a single job."""
+    print(f" [x] Received job ID: {job_id_str}")
+    job_id = uuid.UUID(job_id_str)
+
+    async with AsyncSessionLocal() as session:
+        try:
+            # 1. Fetch job and update status to PROCESSING
+            result = await session.execute(select(Job).where(Job.id == job_id))
+            job = result.scalar_one_or_none()
+            if not job:
+                print(f" [!] Job {job_id} not found in database. Ignoring.")
+                return
+
+            job.status = StatusEnum.PROCESSING
+            await session.commit()
+            print(f" [*] Processing job {job.id} for file {job.original_filename}")
+
+            # 2. Find file and extract metadata
+            file_extension = Path(job.original_filename).suffix
+            file_path = Path(settings.UPLOAD_DIR) / f"{job.id}{file_extension}"
+
+            if not file_path.exists():
+                raise FileNotFoundError(f"File not found at {file_path}")
+
+            metadata = extract_file_metadata(file_path)
+
+            # 3. Update job with result
+            job.metadata = metadata
+            job.status = StatusEnum.COMPLETED
+            print(f" [+] Job {job.id} completed successfully.")
+
+        except Exception as e:
+            print(f" [!] Error processing job {job_id}: {e}")
+            if 'job' in locals() and job:
+                job.status = StatusEnum.FAILED
+                job.metadata = {"error": str(e)}
+        finally:
+            if 'job' in locals() and job:
+                await session.commit()
+
+
+async def rabbitmq_callback(ch, method, properties, body):
+    job_id = body.decode()
+    await process_job(job_id)
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+
+
+def main():
+    print(' [*] Worker starting. To exit press CTRL+C')
+    
+    # Simple retry logic for RabbitMQ connection
+    connection = None
+    for i in range(10):
+        try:
+            connection = pika.BlockingConnection(pika.URLParameters(settings.RABBITMQ_URL))
+            print(" [+] Connected to RabbitMQ.")
+            break
+        except pika.exceptions.AMQPConnectionError:
+            print(f" [!] RabbitMQ not available, retrying in 5 seconds... ({i+1}/10)")
+            time.sleep(5)
+
+    if not connection:
+        print(" [!] Could not connect to RabbitMQ after multiple retries. Exiting.")
+        return
+
+    channel = connection.channel()
+    channel.queue_declare(queue=settings.RABBITMQ_QUEUE, durable=True)
+    channel.basic_qos(prefetch_count=1)
+
+    # We need to wrap the async callback to be called from the sync pika library
+    def sync_callback(ch, method, properties, body):
+        import asyncio
+        asyncio.run(rabbitmq_callback(ch, method, properties, body))
+        
+    channel.basic_consume(queue=settings.RABBITMQ_QUEUE, on_message_callback=sync_callback)
+    
+    try:
+        channel.start_consuming()
+    except KeyboardInterrupt:
+        print(" [-] Worker stopping.")
+        channel.stop_consuming()
+    finally:
+        connection.close()
+
+
+if __name__ == '__main__':
+    main()
+```
+
+### How to Run
+
+1.  **Prerequisites**: Docker and Docker Compose must be installed.
+2.  **Environment**: Create a `.env` file in the project root by copying `.env.example` and filling in the values (the defaults will work fine).
+3.  **Build and Start**: Open a terminal in the project's root directory and run:
+    ```bash
+    docker-compose up --build
+    ```
+4.  **Test the Service**:
+    *   **Upload a file** (e.g., an image named `test.jpg`):
+        ```bash
+        curl -X POST "http://localhost:8000/upload" \
+             -F "file=@/path/to/your/test.jpg"
+        ```
+        You will receive a JSON response with a `job_id`.
+        ```json
+        {
+          "job_id": "c2a2d2e1-7c9b-4f7d-8f9c-1f4a9b3d0a1b",
+          "status_url": "/status/c2a2d2e1-7c9b-4f7d-8f9c-1f4a9b3d0a1b"
+        }
+        ```
+    *   **Check the status**: Use the `job_id` from the response to check the status. It will initially be `QUEUED` or `PROCESSING`.
+        ```bash
+        curl http://localhost:8000/status/c2a2d2e1-7c9b-4f7d-8f9c-1f4a9b3d0a1b
+        ```
+    *   **View the result**: After a moment, check again. The status should be `COMPLETED` and the `metadata` field will be populated.
+        ```json
+        {
+          "id": "c2a2d2e1-7c9b-4f7d-8f9c-1f4a9b3d0a1b",
+          "original_filename": "test.jpg",
+          "status": "COMPLETED",
+          "metadata": {
+            "Image width": "1920 pixels",
+            "Image height": "1080 pixels",
+            "MIME type": "image/jpeg",
+            "File size": "256 KB",
+            "Creation date": "2023-11-28 10:30:00"
+            /* ... other metadata ... */
+          },
+          "created_at": "2023-11-28T18:45:00.123456",
+          "updated_at": "2023-11-28T18:45:02.654321"
+        }
+        ```
+5.  **Shutdown**: Press `CTRL+C` in the terminal where `docker-compose` is running, then run `docker-compose down` to stop and remove the containers.

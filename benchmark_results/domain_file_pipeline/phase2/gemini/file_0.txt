@@ -1,0 +1,15 @@
+file-pipeline-api/
+├── app/
+│   ├── __init__.py
+│   ├── celery_worker.py  # Celery app configuration
+│   ├── main.py           # FastAPI application and endpoints
+│   ├── schemas.py        # Pydantic data models (schemas)
+│   └── tasks.py          # Celery task definitions
+├── tests/
+│   ├── __init__.py
+│   └── test_api.py       # Unit tests for the API
+├── .gitignore
+├── docker-compose.yml    # Orchestrates all services
+├── Dockerfile            # Defines the Python application container
+├── README.md             # Instructions and documentation
+└── requirements.txt      # Python dependencies

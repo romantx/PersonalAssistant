@@ -1,0 +1,7 @@
+
+#### Register User
+
+- **Endpoint**: `POST /register`
+- **Success Response**: `201 Created`
+
+**Example:**

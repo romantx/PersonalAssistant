@@ -1,0 +1,353 @@
+As a senior system architect, I have designed this Wishlist Microservice with scalability, security, and separation of concerns in mind. 
+
+### Architectural Decisions
+1. **Extensibility (1:N Relationship):** While a user might only need one wishlist initially, e-commerce platforms frequently evolve to support multiple wishlists (e.g., "My PC Build", "Christmas Gifts"). The API uses `/wishlists/{wishlistId}` to future-proof the design.
+2. **Security & Ownership:** The API enforces the "Users can view their own wishlist only" requirement via a JWT Bearer token. The API Gateway or the service itself extracts the `userId` from the token and validates it against the `userId` stored on the wishlist record. Direct object references (IDOR) are prevented by this ownership check, returning a `403 Forbidden` if a user attempts to access another user's wishlist.
+3. **Data Hydration:** This microservice is strictly responsible for wishlist state. It stores `productId` (UUID) references, not product metadata (names, prices). An API Gateway or BFF (Backend-For-Frontend) should orchestrate fetching product details from the Product Catalog microservice.
+
+Here are the deliverables.
+
+### 1. OpenAPI 3.0 Specification
+
+```yaml
+openapi: 3.0.3
+info:
+  title: Wishlist Microservice API
+  description: RESTful API for managing user product wishlists.
+  version: 1.0.0
+  contact:
+    name: Architecture Team
+servers:
+  - url: https://api.example.com/v1
+    description: Production Environment
+tags:
+  - name: Wishlists
+    description: Wishlist management endpoints
+paths:
+  /wishlists:
+    get:
+      tags:
+        - Wishlists
+      summary: Get all wishlists for the authenticated user
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: A list of wishlists
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Wishlist'
+    post:
+      tags:
+        - Wishlists
+      summary: Create a new wishlist
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWishlistRequest'
+      responses:
+        '201':
+          description: Wishlist created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+
+  /wishlists/{wishlistId}:
+    get:
+      tags:
+        - Wishlists
+      summary: Get a specific wishlist by ID
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Wishlist details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Wishlist'
+        '403':
+          description: Forbidden (User does not own this wishlist)
+        '404':
+          description: Wishlist not found
+
+  /wishlists/{wishlistId}/items:
+    post:
+      tags:
+        - Wishlists
+      summary: Add a product to the wishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddProductRequest'
+      responses:
+        '201':
+          description: Product added to wishlist
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductItem'
+        '403':
+          description: Forbidden
+        '404':
+          description: Wishlist not found
+        '409':
+          description: Product already exists in the wishlist
+
+  /wishlists/{wishlistId}/items/{productId}:
+    delete:
+      tags:
+        - Wishlists
+      summary: Remove a product from the wishlist
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: wishlistId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Product successfully removed
+        '403':
+          description: Forbidden
+        '404':
+          description: Wishlist or Product not found
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Provide the JWT token issued by the Identity Provider.
+  schemas:
+    Wishlist:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          example: "My Summer Wardrobe"
+        userId:
+          type: string
+          format: uuid
+          readOnly: true
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductItem'
+      required:
+        - id
+        - name
+        - userId
+        - createdAt
+        - updatedAt
+        - items
+    ProductItem:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        addedAt:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+        - productId
+        - addedAt
+    CreateWishlistRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+      required:
+        - name
+    AddProductRequest:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+      required:
+        - productId
+```
+
+### 2. JSON Schemas
+
+These are standalone JSON Schema Draft 2020-12 files that can be used for payload validation or event streaming (e.g., publishing to Kafka).
+
+#### `Wishlist.json`
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://api.example.com/schemas/wishlist.json",
+  "title": "Wishlist",
+  "description": "Schema representing a user's product wishlist",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique identifier for the wishlist"
+    },
+    "userId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identifier of the user who owns the wishlist"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Display name of the wishlist"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "$ref": "product-item.json"
+      },
+      "description": "List of products in the wishlist"
+    }
+  },
+  "required": ["id", "userId", "name", "createdAt", "updatedAt", "items"],
+  "additionalProperties": false
+}
+```
+
+#### `ProductItem.json`
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://api.example.com/schemas/product-item.json",
+  "title": "ProductItem",
+  "description": "Schema representing a product added to a wishlist",
+  "type": "object",
+  "properties": {
+    "productId": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Reference to the product in the Product Catalog"
+    },
+    "addedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the product was added to the wishlist"
+    }
+  },
+  "required": ["productId", "addedAt"],
+  "additionalProperties": false
+}
+```
+
+### 3. Docker Compose (`docker-compose.yml`)
+
+This configuration uses PostgreSQL as the backing datastore (ideal for relational mapping of users -> wishlists -> products). It includes a health check to ensure the API service waits for the database to be fully ready to accept connections.
+
+```yaml
+version: '3.8'
+
+services:
+  wishlist-api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: wishlist-service:latest
+    container_name: wishlist_api
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_PORT=8080
+      - APP_ENV=development
+      - DATABASE_URL=postgres://wishlist_user:wishlist_pass@wishlist-db:5432/wishlist_db?sslmode=disable
+      - JWT_SECRET=your_jwt_validation_secret
+    depends_on:
+      wishlist-db:
+        condition: service_healthy
+    networks:
+      - wishlist-network
+    restart: unless-stopped
+
+  wishlist-db:
+    image: postgres:15-alpine
+    container_name: wishlist_db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=wishlist_user
+      - POSTGRES_PASSWORD=wishlist_pass
+      - POSTGRES_DB=wishlist_db
+    volumes:
+      - wishlist-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wishlist_user -d wishlist_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - wishlist-network
+    restart: unless-stopped
+
+networks:
+  wishlist-network:
+    driver: bridge
+
+volumes:
+  wishlist-db-data:
+    name: wishlist_db_data
+```

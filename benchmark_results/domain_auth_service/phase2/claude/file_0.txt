@@ -1,0 +1,16 @@
+auth-service/
+├── src/
+│   ├── __init__.py
+│   ├── app.py
+│   ├── models.py
+│   ├── auth.py
+│   └── database.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_auth.py
+│   └── conftest.py
+├── requirements.txt
+├── config.py
+├── docker-compose.yml
+├── Dockerfile
+└── README.md

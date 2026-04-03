@@ -26,3 +26,10 @@ __pycache__/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Logs and databases
+*.db
+*.db-shm
+*.db-wal
+council_logs/
+out.txt

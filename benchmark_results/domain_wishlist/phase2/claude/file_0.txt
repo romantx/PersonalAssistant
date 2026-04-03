@@ -1,0 +1,14 @@
+wishlist-api/
+├── app/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── routes.py
+│   └── auth.py
+├── tests/
+│   ├── __init__.py
+│   ├── test_wishlist.py
+│   └── conftest.py
+├── requirements.txt
+├── config.py
+├── run.py
+└── docker-compose.yml

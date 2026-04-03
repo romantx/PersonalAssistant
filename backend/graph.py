@@ -2,7 +2,7 @@ from langgraph.graph import StateGraph, END
 from state import AgentState
 from agents import research_agent, coding_agent, comms_agent, router_node, router_edge
 
-def build_graph():
+def build_graph(memory=None):
     workflow = StateGraph(AgentState)
     
     # Add nodes
@@ -38,6 +38,8 @@ def build_graph():
     workflow.add_edge("coding_agent", END)
     workflow.add_edge("comms_agent", END)
     
-    return workflow.compile()
+    return workflow.compile(checkpointer=memory)
 
+# We initialize a null graph by default so other files can import app_graph if needed,
+# but the real checkpointer graph will be built at startup dynamically.
 app_graph = build_graph()

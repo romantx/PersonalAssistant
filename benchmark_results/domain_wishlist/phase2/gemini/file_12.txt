@@ -1,0 +1,23 @@
+
+## Setup and Installation
+
+1.  **Clone the repository:**
+    ```sh
+    git clone <your-repo-url>
+    cd wishlist-api
+    ```
+
+2.  **Create a virtual environment (recommended):**
+    ```sh
+    python -m venv venv
+    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    ```
+
+3.  **Install dependencies:**
+    ```sh
+    pip install -r requirements.txt
+    ```
+
+## Running the Service
+
+You can run the API locally using Uvicorn.

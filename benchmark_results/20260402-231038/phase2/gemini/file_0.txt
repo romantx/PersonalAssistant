@@ -1,0 +1,3 @@
+
+### 2. `main.py`
+The functional application code containing the models, mocked JWT security dependency, and the route implementations. In-memory dictionaries are used to store data for demonstration purposes.

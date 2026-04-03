@@ -1,0 +1,13 @@
+auth-api/
+├── cmd/
+│   └── server/
+│       └── main.go
+├── internal/
+│   └── handler/
+│       ├── auth_handlers.go
+│       └── auth_handlers_test.go
+├── .gitignore
+├── Dockerfile
+├── go.mod
+├── go.sum
+└── README.md

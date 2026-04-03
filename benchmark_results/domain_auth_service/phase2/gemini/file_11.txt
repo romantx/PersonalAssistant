@@ -1,0 +1,4 @@
+
+### 2. Tidy dependencies
+
+This will ensure `go.mod` and `go.sum` are up-to-date.

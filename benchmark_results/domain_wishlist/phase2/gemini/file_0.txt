@@ -1,0 +1,16 @@
+wishlist-api/
+├── app/
+│   ├── __init__.py
+│   ├── crud.py
+│   ├── database.py
+│   ├── main.py
+│   ├── models.py
+│   ├── schemas.py
+│   └── security.py
+├── tests/
+│   ├── __init__.py
+│   └── test_api.py
+├── .gitignore
+├── Dockerfile
+├── README.md
+└── requirements.txt

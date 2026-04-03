@@ -1,0 +1,3 @@
+
+### 3. `test_main.py`
+Comprehensive unit tests using Pytest and FastAPI's built-in TestClient.

@@ -1,0 +1,42 @@
+openapi: 3.0.0
+info:
+  title: Wishlist API
+  version: 1.0.0
+paths:
+  /wishlist:
+    post:
+      summary: Create a wishlist
+      security:
+        - BearerAuth: []
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: View own wishlist
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: OK
+  /wishlist/{wishlist_id}/items:
+    post:
+      summary: Add product
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Added
+  /wishlist/{wishlist_id}/items/{product_id}:
+    delete:
+      summary: Remove product
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Removed
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

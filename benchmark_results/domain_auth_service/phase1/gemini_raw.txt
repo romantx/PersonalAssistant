@@ -1,0 +1,619 @@
+Of course. Here is a complete design and implementation for a RESTful authentication service featuring JWT, rate limiting, and a PostgreSQL backend, containerized with Docker.
+
+The solution is built using Python with the FastAPI framework, which is excellent for its performance, ease of use, and automatic generation of OpenAPI documentation.
+
+### 1. High-Level Design
+
+*   **API Framework**: **FastAPI** for its high performance and automatic OpenAPI/JSON Schema generation.
+*   **Database**: **PostgreSQL** for a robust, relational user store. We'll use **SQLAlchemy** as the ORM.
+*   **Authentication**: **JWT (JSON Web Tokens)** for stateless authentication. Passwords will be securely hashed using **bcrypt**.
+*   **Rate Limiting**: An in-memory **Redis** cache will track login attempts per IP address, implemented with the `slowapi` library.
+*   **Containerization**: **Docker and Docker Compose** to orchestrate the API service, PostgreSQL database, and Redis cache.
+*   **Configuration**: Environment variables managed by Pydantic's `BaseSettings` for security and flexibility.
+
+The service will expose three main endpoints:
+*   `POST /register`: Create a new user.
+*   `POST /login`: Authenticate a user and return a JWT. This endpoint is rate-limited.
+*   `GET /users/me`: A protected endpoint to demonstrate token validation.
+
+---
+
+### 2. OpenAPI 3.0 Specification
+
+This `openapi.yaml` file describes the API endpoints, request/response formats, and security schemes. While FastAPI generates this automatically at the `/openapi.json` endpoint, here is the manually crafted equivalent for clarity.
+
+```yaml
+# openapi.yaml
+openapi: 3.0.3
+info:
+  title: JWT Authentication Service
+  description: A RESTful service for user registration and JWT-based authentication with rate limiting.
+  version: 1.0.0
+paths:
+  /register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: Creates a new user account with an email and password. The email must be unique.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Bad Request (e.g., email already registered)
+  /login:
+    post:
+      tags:
+        - Authentication
+      summary: User Login
+      description: >-
+        Authenticates a user and returns a JWT access token. 
+        This endpoint is rate-limited to 5 attempts per minute per IP.
+        Expects `application/x-www-form-urlencoded` data with `username` (email) and `password` fields.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                  description: The user's email address.
+                password:
+                  type: string
+                  format: password
+              required:
+                - username
+                - password
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Token'
+        '401':
+          description: Unauthorized (invalid credentials)
+        '429':
+          description: Too Many Requests (rate limit exceeded)
+  /users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current user
+      description: Fetches the profile of the currently authenticated user. Requires a valid JWT in the Authorization header.
+      security:
+        - OAuth2PasswordBearer: []
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Unauthorized (invalid or expired token)
+components:
+  schemas:
+    UserCreate:
+      $ref: '#/components/schemas/UserCreateSchema'
+    User:
+      $ref: '#/components/schemas/UserSchema'
+    Token:
+      $ref: '#/components/schemas/TokenSchema'
+    HTTPValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationError'
+    ValidationError:
+      type: object
+      properties:
+        loc:
+          type: array
+          items:
+            anyOf:
+              - type: string
+              - type: integer
+        msg:
+          type: string
+        type:
+          type: string
+
+    # Re-usable schemas (referenced above)
+    UserCreateSchema:
+      title: UserCreate
+      required:
+        - email
+        - password
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+    UserSchema:
+      title: User
+      required:
+        - id
+        - email
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+    TokenSchema:
+      title: Token
+      required:
+        - access_token
+        - token_type
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+  securitySchemes:
+    OAuth2PasswordBearer:
+      type: oauth2
+      flows:
+        password:
+          tokenUrl: /login
+          scopes: {}
+```
+
+---
+
+### 3. JSON Schemas
+
+These define the structure of the data sent to and received from the API. They are referenced from the OpenAPI specification above.
+
+#### `UserCreate.json`
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "UserCreate",
+  "type": "object",
+  "required": ["email", "password"],
+  "properties": {
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "The user's unique email address."
+    },
+    "password": {
+      "type": "string",
+      "minLength": 8,
+      "description": "The user's password (at least 8 characters)."
+    }
+  }
+}
+```
+
+#### `User.json` (Response Model)
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "User",
+  "type": "object",
+  "required": ["id", "email"],
+  "properties": {
+    "id": {
+      "type": "integer",
+      "description": "The unique identifier for the user."
+    },
+    "email": {
+      "type": "string",
+      "format": "email",
+      "description": "The user's email address."
+    }
+  }
+}
+```
+
+#### `Token.json` (Login Response)
+```json
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Token",
+  "type": "object",
+  "required": ["access_token", "token_type"],
+  "properties": {
+    "access_token": {
+      "type": "string",
+      "description": "The JWT access token."
+    },
+    "token_type": {
+      "type": "string",
+      "default": "bearer",
+      "description": "The type of the token."
+    }
+  }
+}
+```
+
+---
+
+### 4. Docker Compose Configuration
+
+This `docker-compose.yml` file sets up the three services: the FastAPI application (`api`), the PostgreSQL database (`db`), and the Redis cache (`redis`).
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: auth_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - ./.env
+    ports:
+      - "5432:5432"
+    networks:
+      - auth_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: auth_redis
+    networks:
+      - auth_net
+
+  api:
+    build: .
+    container_name: auth_api
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./app:/app
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./.env
+    depends_on:
+      - db
+      - redis
+    networks:
+      - auth_net
+
+networks:
+  auth_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+```
+
+---
+
+### 5. Full Implementation
+
+Here is the complete source code for the application.
+
+#### Project Structure
+```
+auth-service/
+├── .env
+├── docker-compose.yml
+├── Dockerfile
+├── requirements.txt
+└── app/
+    ├── __init__.py
+    ├── main.py
+    ├── crud.py
+    ├── database.py
+    ├── models.py
+    ├── schemas.py
+    ├── security.py
+    └── config.py
+```
+
+#### `.env` (Environment Variables)
+Create this file in the root `auth-service/` directory. **Remember to change `YOUR_SUPER_SECRET_KEY`**.
+
+```
+# .env
+
+# PostgreSQL settings
+POSTGRES_USER=user
+POSTGRES_PASSWORD=password
+POSTGRES_DB=auth_db
+POSTGRES_HOST=db
+DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}/${POSTGRES_DB}
+
+# Redis settings
+REDIS_HOST=redis
+REDIS_URL=redis://${REDIS_HOST}:6379
+
+# JWT settings
+SECRET_KEY=YOUR_SUPER_SECRET_KEY_CHANGE_THIS
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+```
+
+#### `requirements.txt`
+```
+# requirements.txt
+fastapi[all]
+uvicorn
+sqlalchemy
+psycopg2-binary
+passlib[bcrypt]
+python-jose[cryptography]
+pydantic-settings
+slowapi
+redis
+```
+
+#### `Dockerfile`
+```dockerfile
+# Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY ./requirements.txt /app/requirements.txt
+
+RUN pip install --no-cache-dir --upgrade -r /app/requirements.txt
+
+COPY ./app /app
+```
+
+#### `app/config.py`
+```python
+# app/config.py
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    DATABASE_URL: str
+    REDIS_URL: str
+    SECRET_KEY: str
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+```
+
+#### `app/database.py`
+```python
+# app/database.py
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from .config import settings
+
+engine = create_engine(settings.DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# Dependency to get DB session
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+```
+
+#### `app/models.py`
+```python
+# app/models.py
+from sqlalchemy import Column, Integer, String
+from .database import Base
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=False)
+```
+
+#### `app/schemas.py`
+```python
+# app/schemas.py
+from pydantic import BaseModel, EmailStr
+
+# Schema for token response
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# Schema for data stored in JWT
+class TokenData(BaseModel):
+    email: EmailStr | None = None
+
+# Base schema for User
+class UserBase(BaseModel):
+    email: EmailStr
+
+# Schema for creating a new user (request)
+class UserCreate(UserBase):
+    password: str
+
+# Schema for reading a user (response)
+class User(UserBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+```
+
+#### `app/security.py`
+```python
+# app/security.py
+from datetime import datetime, timedelta, timezone
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy.orm import Session
+
+from . import crud, models, schemas
+from .config import settings
+from .database import get_db
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return encoded_jwt
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        token_data = schemas.TokenData(email=email)
+    except JWTError:
+        raise credentials_exception
+    
+    user = crud.get_user_by_email(db, email=token_data.email)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_active_user(current_user: Annotated[models.User, Depends(get_current_user)]):
+    # In a real app, you might have an `is_active` flag on the user model
+    return current_user
+```
+
+#### `app/crud.py`
+```python
+# app/crud.py
+from sqlalchemy.orm import Session
+from . import models, schemas, security
+
+def get_user_by_email(db: Session, email: str):
+    return db.query(models.User).filter(models.User.email == email).first()
+
+def create_user(db: Session, user: schemas.UserCreate):
+    hashed_password = security.get_password_hash(user.password)
+    db_user = models.User(email=user.email, hashed_password=hashed_password)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+```
+
+#### `app/main.py`
+```python
+# app/main.py
+from datetime import timedelta
+from typing import Annotated
+
+import redis.asyncio as redis
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordRequestForm
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from sqlalchemy.orm import Session
+
+from . import crud, models, schemas, security
+from .config import settings
+from .database import Base, engine, get_db
+
+# Create DB tables on startup
+Base.metadata.create_all(bind=engine)
+
+# Initialize Rate Limiter
+limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
+
+app = FastAPI(title="JWT Authentication Service")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.post("/register", response_model=schemas.User)
+def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = crud.get_user_by_email(db, email=user.email)
+    if db_user:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    return crud.create_user(db=db, user=user)
+
+
+@app.post("/login", response_model=schemas.Token)
+@limiter.limit("5/minute")
+async def login_for_access_token(
+    request: Request, # Required for rate limiting
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+    db: Session = Depends(get_db)
+):
+    user = crud.get_user_by_email(db, email=form_data.username)
+    if not user or not security.verify_password(form_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.get("/users/me", response_model=schemas.User)
+async def read_users_me(current_user: Annotated[models.User, Depends(security.get_current_active_user)]):
+    return current_user
+```
+
+---
+
+### 6. How to Run
+
+1.  **Prerequisites**: Make sure you have Docker and Docker Compose installed.
+2.  **Create Project**: Create the directory structure and all the files as listed above.
+3.  **Configure**: Edit the `.env` file and replace `YOUR_SUPER_SECRET_KEY_CHANGE_THIS` with a strong, unique secret string. You can generate one with `openssl rand -hex 32`.
+4.  **Build and Run**: Open a terminal in the root `auth-service/` directory and run:
+    ```bash
+    docker-compose up --build
+    ```
+5.  **Access the API**:
+    *   The API will be running at `http://localhost:8000`.
+    *   Interactive documentation (Swagger UI) is available at `http://localhost:8000/docs`. You can use this interface to test all the endpoints.
+    *   The OpenAPI JSON specification is at `http://localhost:8000/openapi.json`.
+
+You can now use the `/docs` page to register a user, then use the "Authorize" button with the user's credentials to get a token, and finally test the protected `/users/me` endpoint. If you attempt to log in with incorrect credentials more than 5 times in a minute from the same IP, you will receive a `429 Too Many Requests` error.
